@@ -146,30 +146,33 @@ async function processFile(file: File) {
 
 .header {
   background: rgba(255, 255, 255, 0.95);
-  padding: 1rem 2rem;
+  padding: 0.8rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap;
 }
 
 .header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: #333;
 }
 
 .header-right {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
 }
 
 .nav-link {
-  margin-left: 1.5rem;
+  margin-left: 0.5rem;
   text-decoration: none;
   color: #666;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.8rem;
   border-radius: 6px;
+  font-size: 0.9rem;
   transition: all 0.3s;
 }
 
@@ -181,7 +184,7 @@ async function processFile(file: File) {
 .main-content {
   max-width: 800px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .upload-section {
@@ -200,7 +203,7 @@ h2 {
 .upload-area {
   border: 2px dashed #ddd;
   border-radius: 12px;
-  padding: 3rem;
+  padding: 2rem 1rem;
   text-align: center;
   transition: all 0.3s;
   cursor: pointer;

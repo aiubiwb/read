@@ -20,8 +20,8 @@
 
     <footer class="footer">
       <button @click="prevChapter" :disabled="currentChapterIndex === 0">◀ 上一章</button>
-      <span class="chapter-info">{{ currentChapterIndex + 1 }} / {{ book?.chapters.length || 0 }}</span>
-      <button @click="nextChapter" :disabled="currentChapterIndex >= (book?.chapters.length || 1) - 1">下一章 ▶</button>
+      <span class="chapter-info">{{ currentChapterIndex + 1 }} / {{ (book?.chapters || []).length }}</span>
+      <button @click="nextChapter" :disabled="currentChapterIndex >= ((book?.chapters || []).length - 1)">下一章 ▶</button>
     </footer>
 
     <div v-if="showMenu" class="menu-overlay" @click="showMenu = false">
@@ -29,11 +29,11 @@
         <h3>章节目录</h3>
         <div class="chapter-list">
           <div 
-            v-for="(chapter, index) in book?.chapters" 
+            v-for="(chapter, index) in (book?.chapters || [])" 
             :key="chapter.id"
             class="chapter-item"
             :class="{ active: index === currentChapterIndex }"
-            @click="goToChapter(index)"
+            @click="goToChapter(Number(index))"
           >
             {{ chapter.title }}
           </div>
@@ -198,7 +198,7 @@ async function saveCurrentProgress() {
 
 .content {
   flex: 1;
-  padding: 1.5rem;
+  padding: 1rem;
   overflow-y: auto;
   max-width: 800px;
   margin: 0 auto;
@@ -223,7 +223,7 @@ async function saveCurrentProgress() {
 
 .footer {
   background: white;
-  padding: 1rem;
+  padding: 0.8rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
