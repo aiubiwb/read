@@ -39,6 +39,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAllBooks, deleteBook as dbDeleteBook } from '../utils/db'
+import { getBooksFromServer, deleteBookFromServer, isLoggedIn } from '../utils/api'
 import type { Book } from '../types'
 
 const router = useRouter()
@@ -54,7 +55,22 @@ onMounted(async () => {
 })
 
 async function loadBooks() {
-  books.value = await getAllBooks()
+  if (isLoggedIn()) {
+    try {
+      const serverBooks = await getBooksFromServer()
+      books.value = serverBooks.map((book: any) => ({
+        id: String(book.id),
+        name: book.name,
+        chapters: book.chapter_count ? Array(book.chapter_count).fill({}) : [],
+        addedAt: book.created_at
+      }))
+    } catch (e) {
+      console.error('获取云端书籍失败:', e)
+      books.value = await getAllBooks()
+    }
+  } else {
+    books.value = await getAllBooks()
+  }
 }
 
 function toggleNightMode() {
@@ -68,7 +84,11 @@ function goToReader(bookId: string) {
 
 async function deleteBook(bookId: string) {
   if (confirm('确定要删除这本书吗？')) {
-    await dbDeleteBook(bookId)
+    if (isLoggedIn()) {
+      await deleteBookFromServer(bookId)
+    } else {
+      await dbDeleteBook(bookId)
+    }
     await loadBooks()
   }
 }

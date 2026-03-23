@@ -46,7 +46,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getBook, getChapterContent, saveProgress, getProgress } from '../utils/db'
+import { getBook as dbGetBook, getChapterContent, saveProgress, getProgress } from '../utils/db'
+import { getBookFromServer, getChapterFromServer, isLoggedIn, getProgressFromServer, saveProgressToServer } from '../utils/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -69,10 +70,18 @@ async function loadChapterContent() {
   const chapter = book.value.chapters[currentChapterIndex.value]
   if (!chapter) return
   
-  const content = await getChapterContent(book.value.id, chapter.id)
-  book.value.chapters[currentChapterIndex.value] = {
-    ...chapter,
-    content: content || ''
+  if (isLoggedIn()) {
+    const cloudChapter = await getChapterFromServer(chapter.id)
+    book.value.chapters[currentChapterIndex.value] = {
+      ...chapter,
+      content: cloudChapter.content || ''
+    }
+  } else {
+    const content = await getChapterContent(book.value.id, chapter.id)
+    book.value.chapters[currentChapterIndex.value] = {
+      ...chapter,
+      content: content || ''
+    }
   }
 }
 
@@ -83,21 +92,34 @@ onMounted(async () => {
   }
   
   const bookId = route.params.id as string
-  book.value = await getBook(bookId)
+  
+  if (isLoggedIn()) {
+    book.value = await getBookFromServer(bookId)
+    const cloudProgress = await getProgressFromServer(bookId)
+    if (cloudProgress) {
+      currentChapterIndex.value = cloudProgress.chapter_index
+      setTimeout(() => {
+        if (contentRef.value) {
+          contentRef.value.scrollTop = cloudProgress.scroll_top
+        }
+      }, 100)
+    }
+  } else {
+    book.value = await dbGetBook(bookId)
+    const progress = await getProgress(book.value.id)
+    if (progress) {
+      currentChapterIndex.value = progress.chapterId
+      setTimeout(() => {
+        if (contentRef.value) {
+          contentRef.value.scrollTop = progress.scrollTop
+        }
+      }, 100)
+    }
+  }
   
   if (!book.value) {
     router.push('/')
     return
-  }
-  
-  const progress = await getProgress(book.value.id)
-  if (progress) {
-    currentChapterIndex.value = progress.chapterId
-    setTimeout(() => {
-      if (contentRef.value) {
-        contentRef.value.scrollTop = progress.scrollTop
-      }
-    }, 100)
   }
   
   await loadChapterContent()
@@ -152,7 +174,11 @@ function onScroll() {
 async function saveCurrentProgress() {
   if (book.value) {
     const scrollTop = contentRef.value?.scrollTop || 0
-    await saveProgress(book.value.id, currentChapterIndex.value, scrollTop)
+    if (isLoggedIn()) {
+      await saveProgressToServer(book.value.id, currentChapterIndex.value, scrollTop)
+    } else {
+      await saveProgress(book.value.id, currentChapterIndex.value, scrollTop)
+    }
   }
 }
 </script>

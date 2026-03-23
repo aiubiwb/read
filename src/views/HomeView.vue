@@ -10,8 +10,22 @@
         <button class="night-mode-btn" @click="toggleNightMode">
           {{ isNightMode ? '☀️' : '🌙' }}
         </button>
+        <button v-if="!isLoggedIn()" class="login-btn" @click="showLogin = true">登录</button>
+        <span v-else class="username">{{ username }} <button @click="handleLogout" class="logout-btn">退出</button></span>
       </div>
     </header>
+
+    <div v-if="showLogin" class="modal-overlay" @click="showLogin = false">
+      <div class="modal" @click.stop>
+        <h3>{{ isRegister ? '注册' : '登录' }}</h3>
+        <input v-model="loginForm.username" placeholder="用户名" />
+        <input v-model="loginForm.password" type="password" placeholder="密码" />
+        <div class="modal-btns">
+          <button @click="handleLogin">{{ isRegister ? '注册' : '登录' }}</button>
+          <button @click="isRegister = !isRegister">{{ isRegister ? '已有账号？登录' : '没有账号？注册' }}</button>
+        </div>
+      </div>
+    </div>
 
     <main class="main-content">
       <div class="upload-section">
@@ -57,7 +71,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { processTxtFile } from '../utils/parser'
-import { getAllBooks, addBook as dbAddBook, saveChapterContent } from '../utils/db'
+import { getAllBooks, addBook as dbAddBook, saveChapterContent, clearAllData } from '../utils/db'
+import { login as apiLogin, register as apiRegister, logout as apiLogout, isLoggedIn, getUsername, uploadBookToServer } from '../utils/api'
 
 const router = useRouter()
 const isDragOver = ref(false)
@@ -66,17 +81,49 @@ const error = ref('')
 const successMessage = ref('')
 const isNightMode = ref(false)
 const progressMessage = ref('')
+const showLogin = ref(false)
+const isRegister = ref(false)
+const loginForm = ref({ username: '', password: '' })
+const username = ref('')
 
 onMounted(() => {
   const saved = localStorage.getItem('nightMode')
   if (saved === 'true') {
     isNightMode.value = true
   }
+  if (isLoggedIn()) {
+    username.value = getUsername() || ''
+  }
 })
 
 function toggleNightMode() {
   isNightMode.value = !isNightMode.value
   localStorage.setItem('nightMode', isNightMode.value ? 'true' : 'false')
+}
+
+async function handleLogin() {
+  try {
+    if (isRegister.value) {
+      await apiRegister(loginForm.value.username, loginForm.value.password)
+      isRegister.value = false
+      alert('注册成功！请登录')
+    } else {
+      await apiLogin(loginForm.value.username, loginForm.value.password)
+      username.value = loginForm.value.username
+      showLogin.value = false
+      loginForm.value = { username: '', password: '' }
+      await clearAllData()
+    }
+  } catch (err: any) {
+    console.error('登录错误:', err)
+    alert(err.response?.data?.error || err.message || '操作失败')
+  }
+}
+
+function handleLogout() {
+  apiLogout()
+  username.value = ''
+  clearAllData()
 }
 
 async function handleFileSelect(event: Event) {
@@ -104,32 +151,45 @@ async function processFile(file: File) {
   isLoading.value = true
   error.value = ''
   successMessage.value = ''
-  progressMessage.value = '正在解析文件...'
   
   try {
-    const { book, chapters } = await processTxtFile(file, (current, total) => {
-      progressMessage.value = `正在保存章节 ${current}/${total}...`
-    })
-    
-    progressMessage.value = '正在保存到数据库...'
-    
-    for (const chapter of chapters) {
-      await saveChapterContent(book.id, chapter.id, chapter.content)
+    if (isLoggedIn()) {
+      progressMessage.value = '正在上传到云端...'
+      const result = await uploadBookToServer('', file)
+      
+      progressMessage.value = ''
+      successMessage.value = `《${file.name.replace('.txt', '')}》上传成功！共${result.chapterCount}章`
+      setTimeout(() => successMessage.value = '', 3000)
+      router.push(`/reader/${result.bookId}`)
+    } else {
+      const { book, chapters } = await processTxtFile(file, (current, total) => {
+        progressMessage.value = `正在解析章节 ${current}/${total}...`
+      })
+      
+      if (chapters.length === 0) {
+        throw new Error('未能解析出任何章节，请检查文件格式')
+      }
+      
+      progressMessage.value = '正在保存到本地数据库...'
+      for (const chapter of chapters) {
+        await saveChapterContent(book.id, chapter.id, chapter.content)
+      }
+      await dbAddBook(book)
+      
+      progressMessage.value = ''
+      successMessage.value = `《${book.name}》上传成功！共${chapters.length}章`
+      setTimeout(() => successMessage.value = '', 3000)
+      router.push(`/reader/${book.id}`)
     }
-    
-    await dbAddBook(book)
-    
-    progressMessage.value = ''
-    successMessage.value = `《${book.name}》上传成功！共${chapters.length}章`
-    setTimeout(() => successMessage.value = '', 3000)
-    router.push(`/reader/${book.id}`)
   } catch (e: any) {
     console.error('上传错误:', e)
     progressMessage.value = ''
     if (e.message && e.message.includes('quota')) {
       error.value = '文件太大啦！浏览器存储空间不足'
+    } else if (e.response?.status === 401) {
+      error.value = '请先登录后再上传'
     } else {
-      error.value = '文件解析失败：' + e.message
+      error.value = '文件解析失败：' + (e.message || '未知错误')
     }
     setTimeout(() => error.value = '', 5000)
   } finally {
@@ -296,6 +356,101 @@ h2 {
 }
 
 .home.night-mode h2 {
+  color: #ddd;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  width: 80%;
+  max-width: 300px;
+}
+
+.modal h3 {
+  margin-top: 0;
+  text-align: center;
+}
+
+.modal input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.modal-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modal-btns button {
+  padding: 0.5rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modal-btns button:last-child {
+  background: #999;
+}
+
+.login-btn {
+  padding: 0.4rem 0.8rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+.username {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 0.5rem;
+}
+
+.logout-btn {
+  padding: 0.2rem 0.5rem;
+  background: #999;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.home.night-mode .modal {
+  background: #2d2d2d;
+}
+
+.home.night-mode .modal h3 {
+  color: #ddd;
+}
+
+.home.night-mode .modal input {
+  background: #3d3d3d;
+  border-color: #555;
   color: #ddd;
 }
 </style>

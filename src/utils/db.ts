@@ -120,3 +120,10 @@ export async function getAllProgress() {
   }
   return result
 }
+
+export async function clearAllData() {
+  const database = await getDB()
+  await database.clear('books')
+  await database.clear('chapters')
+  await database.clear('progress')
+}
