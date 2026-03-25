@@ -188,6 +188,8 @@ async function processFile(file: File) {
       error.value = '文件太大啦！浏览器存储空间不足'
     } else if (e.response?.status === 401) {
       error.value = '请先登录后再上传'
+    } else if (e.response?.status === 400 && e.response?.data?.error) {
+      error.value = e.response.data.error
     } else {
       error.value = '文件解析失败：' + (e.message || '未知错误')
     }
