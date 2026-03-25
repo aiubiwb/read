@@ -4,12 +4,17 @@ import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import multer from 'multer'
-import { readFile, readdir, unlink } from 'fs/promises'
-import { join, dirname } from 'path'
+import { readFile, readdir, unlink, mkdir } from 'fs/promises'
+import { join, dirname, existsSync } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const config = JSON.parse(await readFile(join(__dirname, 'config.json'), 'utf-8'))
+
+const uploadsDir = join(__dirname, 'uploads')
+if (!existsSync(uploadsDir)) {
+  await mkdir(uploadsDir, { recursive: true })
+}
 
 const app = express()
 const PORT = 3000
@@ -315,6 +320,17 @@ app.post('/api/upload', authenticateToken, upload.single('file'), async (req, re
     const finalBookName = bookName || parsedName || '未命名'
     
     await connection.beginTransaction()
+    
+    const [existing] = await connection.execute(
+      'SELECT id FROM books WHERE user_id = ? AND name = ?',
+      [req.user.id, finalBookName]
+    )
+    
+    if (existing.length > 0) {
+      await connection.rollback()
+      await unlink(filePath)
+      return res.status(400).json({ error: '这本书已经上传过了' })
+    }
     
     const [bookResult] = await connection.execute(
       'INSERT INTO books (user_id, name, filename, created_at) VALUES (?, ?, ?, NOW())',
