@@ -5,7 +5,8 @@ import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import multer from 'multer'
 import { readFile, readdir, unlink, mkdir } from 'fs/promises'
-import { join, dirname, existsSync } from 'path'
+import { existsSync } from 'fs'
+import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
